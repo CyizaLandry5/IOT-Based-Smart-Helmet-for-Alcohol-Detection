@@ -1,7 +1,9 @@
-<?php include "layout/header.php"; ?>
+<?php
+require_once __DIR__ . '/../app/middleware/auth.php';
+include "layout/header.php";
+?>
 
 <style>
-/* Simple responsive dashboard grid */
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -24,8 +26,6 @@
 .card h2 { margin: 10px 0; font-size: 1.5rem; }
 .card p { color: #555; }
 </style>
-
-<!-- <h1>Welcome to IOT Based Smart Helmet for Alcohol Detection</h1> -->
 
 <div class="dashboard-grid">
     <div class="card" onclick="location.href='helmets.php'">

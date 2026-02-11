@@ -1,3 +1,7 @@
+<?php
+require_once __DIR__ . '/../app/middleware/auth.php';
+?>
+
 <?php include "layout/header.php"; ?>
 <a href="dashboard.php"><button>Back</button></a>
 <h2>Live Cases</h2>
