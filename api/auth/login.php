@@ -1,8 +1,8 @@
 <?php
 
 session_start();
-
 header("Content-Type: application/json");
+
 require_once "../../app/config/database.php";
 
 $data = json_decode(file_get_contents("php://input"), true);
@@ -29,6 +29,13 @@ if (!$user || $password !== $user['password']) {
     ]);
     exit;
 }
+
+/* CREATE SESSION */
+$_SESSION['user_id'] = $user['id'];
+$_SESSION['username'] = $user['username'];
+
+/* Prevent session fixation */
+session_regenerate_id(true);
 
 echo json_encode([
     "status" => true,
