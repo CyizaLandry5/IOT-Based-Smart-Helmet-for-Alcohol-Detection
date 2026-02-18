@@ -31,7 +31,7 @@
              style="width:44px; height:44px;
                     border-radius:50%;
                     overflow:hidden;
-                    border:2px solid #f1e9e9;
+                    border:2px solid #f1eeee;
                     cursor:pointer;
                     flex-shrink:0;">
 
