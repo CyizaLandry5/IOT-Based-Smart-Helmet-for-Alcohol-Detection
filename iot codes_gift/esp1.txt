@@ -1,0 +1,293 @@
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <TinyGPS++.h>
+#include <LiquidCrystal_I2C.h>
+
+// ================= PINS =================
+#define MQ3 34
+#define BUZZER 23
+#define RED 14
+#define GREEN 27
+#define BLUE 26
+
+// ================= SERIAL =================
+HardwareSerial espSerial(1);   // send data to ESP2
+HardwareSerial gpsSerial(2);
+
+TinyGPSPlus gps;
+LiquidCrystal_I2C lcd(0x27,16,2);
+
+// ================= WIFI =================
+const char* ssid ="EdNet";
+const char* password="Huawei@123";
+
+// ================= WHATSAPP =================
+String waPhone="250788963055";
+String apiKey="7460561";
+
+// ================= VARIABLES =================
+float alcoholValue;
+String latitude="0.000000";
+String longitude="0.000000";
+
+unsigned long lastAlertTime=0;
+const unsigned long alertInterval=30000;
+
+
+// ================= SEND TO ESP2 =================
+void sendToESP2(String msg){
+
+  Serial.println("Sending to ESP2");
+  espSerial.println(msg);
+}
+
+
+// ================= WHATSAPP =================
+void sendWhatsApp(String message){
+
+  if(WiFi.status()==WL_CONNECTED){
+
+    HTTPClient http;
+
+    message.replace(" ","%20");
+
+    String url="https://api.callmebot.com/whatsapp.php?phone="+waPhone+
+               "&text="+message+
+               "&apikey="+apiKey;
+
+    Serial.println(url);
+
+    http.begin(url);
+
+    int httpCode=http.GET();
+
+    Serial.print("WhatsApp Response: ");
+    Serial.println(httpCode);
+
+    http.end();
+  }
+}
+
+
+// ================= SEND DATA TO WEBSITE =================
+void sendToWeb(String data){
+
+  if(WiFi.status()==WL_CONNECTED){
+
+    HTTPClient http;
+
+    data.replace(" ","%20");
+
+    String url="http://pastpapershub.cyizalandry.com/admin/update.php?data="+data;
+
+    http.begin(url);
+
+    int httpCode=http.GET();
+
+    Serial.print("WEB RESPONSE: ");
+    Serial.println(httpCode);
+
+    http.end();
+  }
+}
+
+
+// ================= DANGER BUZZER =================
+void dangerBuzzer(){
+
+  for(int i=0;i<5;i++){
+
+    tone(BUZZER,1500);
+    digitalWrite(RED,HIGH);
+    delay(120);
+
+    tone(BUZZER,2500);
+    digitalWrite(RED,LOW);
+    delay(120);
+
+    noTone(BUZZER);
+    digitalWrite(RED,LOW);
+    delay(80);
+  }
+
+  for(int i=0;i<3;i++){
+
+    tone(BUZZER,3000);
+    digitalWrite(RED,HIGH);
+    delay(200);
+
+    noTone(BUZZER);
+    digitalWrite(RED,LOW);
+    delay(100);
+  }
+}
+
+
+// ================= WARNING BEEP =================
+void beep(){
+
+  for(int i=0;i<3;i++){
+
+    tone(BUZZER,2000);
+    delay(200);
+
+    noTone(BUZZER);
+    delay(200);
+  }
+}
+
+
+// ================= SAFE MODE =================
+void safeMode(){
+
+  digitalWrite(GREEN,HIGH);
+  digitalWrite(RED,LOW);
+  digitalWrite(BLUE,LOW);
+
+  lcd.setCursor(0,0);
+  lcd.print("Alcohol:");
+  lcd.print(alcoholValue);
+  lcd.print("   ");
+
+  lcd.setCursor(0,1);
+  lcd.print("SAFE          ");
+}
+
+
+// ================= WARNING MODE =================
+void warningMode(){
+
+  digitalWrite(GREEN,LOW);
+  digitalWrite(RED,LOW);
+  digitalWrite(BLUE,HIGH);
+
+  lcd.setCursor(0,0);
+  lcd.print("Alcohol:");
+  lcd.print(alcoholValue);
+  lcd.print("   ");
+
+  lcd.setCursor(0,1);
+  lcd.print("WARNING       ");
+
+  beep();
+
+  if(millis()-lastAlertTime>alertInterval){
+
+    String message="WARNING Alcohol="+String(alcoholValue)+
+                   " https://maps.google.com/?q="+latitude+","+longitude;
+
+    sendWhatsApp(message);
+    sendToWeb(message);
+    sendToESP2(message);
+
+    lastAlertTime=millis();
+  }
+}
+
+
+// ================= DANGER MODE =================
+void dangerMode(){
+
+  digitalWrite(GREEN,LOW);
+  digitalWrite(BLUE,LOW);
+
+  lcd.setCursor(0,0);
+  lcd.print("Alcohol:");
+  lcd.print(alcoholValue);
+  lcd.print("   ");
+
+  lcd.setCursor(0,1);
+  lcd.print("!!! DANGER !!!");
+
+  dangerBuzzer();
+
+  if(millis()-lastAlertTime>alertInterval){
+
+    String message="DANGER Alcohol="+String(alcoholValue)+
+                   " https://maps.google.com/?q="+latitude+","+longitude;
+   
+
+    sendWhatsApp(message);
+    sendToWeb(message);
+    sendToESP2(message);
+
+    lastAlertTime=millis();
+  }
+}
+
+
+// ================= SETUP =================
+void setup(){
+
+  Serial.begin(115200);
+
+  espSerial.begin(9600,SERIAL_8N1,18,19);  // ESP2 communication
+  gpsSerial.begin(9600,SERIAL_8N1,5,4);
+
+  pinMode(BUZZER,OUTPUT);
+  pinMode(RED,OUTPUT);
+  pinMode(GREEN,OUTPUT);
+  pinMode(BLUE,OUTPUT);
+  pinMode(MQ3,INPUT);
+
+  lcd.init();
+  lcd.backlight();
+
+  lcd.setCursor(0,0);
+  lcd.print("Connecting WiFi");
+
+  WiFi.begin(ssid,password);
+
+  while(WiFi.status()!=WL_CONNECTED){
+
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("WiFi Connected");
+  Serial.println(WiFi.localIP());
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("SYSTEM READY");
+  lcd.setCursor(0,1);
+  lcd.print("GPS STARTING");
+
+  delay(2000);
+}
+
+
+// ================= LOOP =================
+void loop(){
+
+  alcoholValue=analogRead(MQ3);
+
+  while(gpsSerial.available()){
+    gps.encode(gpsSerial.read());
+  }
+
+  if(gps.location.isValid()){
+    latitude=String(gps.location.lat(),6);
+    longitude=String(gps.location.lng(),6);
+  }
+
+  Serial.print("Alcohol Value: ");
+  Serial.println(alcoholValue);
+
+  if(alcoholValue<=1000){
+
+    safeMode();
+
+  }
+  else if(alcoholValue>1000 && alcoholValue<=1600){
+
+    warningMode();
+
+  }
+  else{
+
+    dangerMode();
+  }
+
+  delay(2000);
+}

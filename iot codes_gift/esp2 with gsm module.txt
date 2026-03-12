@@ -1,0 +1,114 @@
+#include <HardwareSerial.h>
+
+// ------------------- SERIAL -------------------
+HardwareSerial espSerial(1);   // communication from ESP1
+HardwareSerial gsm(2);         // GSM module
+
+// ------------------- PHONE --------------------
+String phoneNumber = "+250787869883";
+
+// ------------------- TIMING -------------------
+unsigned long previousCheck = 0;
+const unsigned long checkInterval = 1000; // 1 second
+
+// ------------------- ALERT TRACKING -------------------
+String lastAlert = "";  // prevent repeated SMS for same data
+
+// ------------------- FUNCTION TO SEND SMS -------------------
+void sendSMS(String msg){
+  Serial.println("Sending SMS...");
+
+  // 1️⃣ Set text mode
+  gsm.println("AT+CMGF=1");
+  delay(1000);
+
+  // 2️⃣ Start SMS
+  gsm.print("AT+CMGS=\"");
+  gsm.print(phoneNumber);
+  gsm.println("\"");
+  delay(1000); // wait for > prompt
+
+  // 3️⃣ Send message
+  gsm.print(msg);
+  gsm.write(26); // CTRL+Z
+  Serial.println("CTRL+Z sent");
+
+  // 4️⃣ Wait for GSM response (up to 15 seconds)
+  long timeout = millis() + 15000;
+  bool sent = false;
+
+  while(millis() < timeout){
+    if(gsm.available()){
+      String resp = gsm.readString();
+      Serial.print(resp);
+      if(resp.indexOf("+CMGS:") != -1){
+        sent = true;
+        break;
+      }
+    }
+  }
+
+  if(sent){
+    Serial.println("SMS successfully sent ✅");
+  } else {
+    Serial.println("SMS failed ❌");
+  }
+}
+
+// ------------------- SETUP -------------------
+void setup(){
+  Serial.begin(115200);
+
+  // ESP1 communication
+  espSerial.begin(9600, SERIAL_8N1, 18, 19); // RX=18, TX=19
+
+  // GSM communication
+  gsm.begin(9600, SERIAL_8N1, 16, 17);       // RX=16, TX=17
+
+  Serial.println("ESP2 GSM READY");
+}
+
+// ------------------- LOOP -------------------
+void loop(){
+  unsigned long currentMillis = millis();
+
+  // Check ESP1 every 1 second
+  if(currentMillis - previousCheck >= checkInterval){
+    previousCheck = currentMillis;
+
+    // Check if ESP1 sent any data
+    if(espSerial.available()){
+      String data = espSerial.readStringUntil('\n');
+      data.trim();
+
+      // Skip if same alert as before
+      if(data == lastAlert) return;
+      lastAlert = data;
+
+      Serial.println("Received from ESP1:");
+      Serial.println(data);
+
+      // Extract GPS link if present
+      int gpsIndex = data.indexOf("https://maps.google.com/?q=");
+      String locationLink = "";
+      if(gpsIndex != -1){
+        locationLink = data.substring(gpsIndex);
+      }
+
+      // Compose SMS
+      String sms =
+        "ALCOHOL ALERT!\n\n" +
+        data +
+        "\n\nLOCATION:\n" +
+        locationLink;
+
+      // Send SMS
+      sendSMS(sms);
+    }
+  }
+
+  // Print any GSM responses in loop
+  if(gsm.available()){
+    Serial.write(gsm.read());
+  }
+}
